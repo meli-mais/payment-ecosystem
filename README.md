@@ -10,26 +10,26 @@ documentação de arquitetura e de replicação em Cloud.
 
 ```
                  POST /api/v1/pagamentos
-   Cliente ─────────────────────────────►  payment-core (SAGA)         :8080
+   Cliente ─────────────────────────────►  payment-core (SAGA, Java)    :8080
                                                 │
                                                 │  POST /comprovantes        (202 + id)
                                                 │  GET  /comprovantes/{id}    (confirma)
                                                 ▼
-                                           comprovantes                 :8081
+                                     ms-comprovantes (Python/FastAPI)    :8081
                                           ┌───────────────┐
-                                RabbitMQ  │ POST → fila →  │  persiste
+                                RabbitMQ  │ POST → fila →  │  persiste no Postgres
                                    Redis  │ GET (cache-aside, 3 tentativas → 404)
-                                   Kafka  │ publica "Pagamento Realizado" ─┐
-                                          └───────────────┘                │
-                                                                           ▼
-                                                              Notificação (@RetryableTopic)
-                                                              (consumer embutido no comprovantes)
+                                Postgres  │                │
+                                          └───────────────┘
 ```
 
-- **payment-core** — Membro 1. Recebe o pagamento, orquestra a SAGA e só dá a fatura como
-  paga se o comprovante for confirmado. Resiliência com Resilience4j.
-- **comprovantes** — Membros 2/3/4. POST assíncrono via RabbitMQ, GET com cache-aside no
-  Redis, evento de notificação no Kafka e consumer de notificação com `@RetryableTopic`.
+- **payment-core** (Java/Spring) — Membro 1. Recebe o pagamento, orquestra a SAGA e só dá a
+  fatura como paga se o comprovante for confirmado. Resiliência com Resilience4j.
+- **ms-comprovantes** (Python/FastAPI) — POST assíncrono via RabbitMQ (persiste no Postgres),
+  GET com cache-aside no Redis (3 tentativas antes do 404). Arquitetura hexagonal.
+
+> O contrato HTTP (paths, payloads snake_case, enums incl. `CHAVE_ALEATORIA`) foi validado
+> campo a campo entre os dois serviços — ver [`docs/arquitetura.md`](docs/arquitetura.md).
 
 Detalhes em [`docs/arquitetura.md`](docs/arquitetura.md).
 
@@ -37,11 +37,8 @@ Detalhes em [`docs/arquitetura.md`](docs/arquitetura.md).
 
 | Submodule (`services/`) | Repositório | Branch | Papel |
 |---|---|---|---|
-| `payment-core` | [meli-mais/payment-core](https://github.com/meli-mais/payment-core) | `develop` | Core & SAGA (Membro 1) |
-| `comprovantes` | [meli-mais/vigilant-goggles](https://github.com/meli-mais/vigilant-goggles) | `main` | Comprovantes + Notificação (Membros 2/3/4) |
-
-> O código do comprovantes fica em `services/comprovantes/ms-comprovantes` (o projeto está
-> aninhado dentro do repo).
+| `payment-core` | [meli-mais/payment-core](https://github.com/meli-mais/payment-core) | `develop` | Core & SAGA (Java) — Membro 1 |
+| `comprovantes` | [meli-mais/ms-comprovantes](https://github.com/meli-mais/ms-comprovantes) | `develop` | Comprovantes (Python/FastAPI) |
 
 ## Como rodar tudo
 
@@ -64,11 +61,10 @@ docker compose up --build
 | Serviço | URL |
 |---|---|
 | payment-core (SAGA) | http://localhost:8080 — Swagger em `/swagger-ui.html` |
-| comprovantes | http://localhost:8081 — H2 em `/h2-console` |
+| ms-comprovantes | http://localhost:8081 — Docs em `/docs` |
 | RabbitMQ (management) | http://localhost:15672 — guest/guest |
-| Kafka UI | http://localhost:8090 |
+| PostgreSQL | localhost:5432 |
 | Redis | localhost:6379 |
-| Kafka | localhost:9092 |
 
 ### Teste de fumaça (happy path)
 

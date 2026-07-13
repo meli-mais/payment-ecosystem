@@ -4,4 +4,5 @@
 	branch = develop
 [submodule "services/comprovantes"]
 	path = services/comprovantes
-	url = https://github.com/meli-mais/vigilant-goggles.git
+	url = https://github.com/meli-mais/ms-comprovantes.git
+	branch = develop
