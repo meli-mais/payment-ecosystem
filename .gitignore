@@ -1,0 +1,23 @@
+# Build / target
+target/
+build/
+*.jar
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI assistant tooling — não faz parte da entrega
+.claude/
+CLAUDE.md
+.specify/
+specs/

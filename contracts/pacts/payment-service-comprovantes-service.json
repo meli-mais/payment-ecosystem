@@ -1,0 +1,120 @@
+{
+  "consumer": {
+    "name": "payment-service"
+  },
+  "interactions": [
+    {
+      "description": "uma consulta de confirma\u00E7\u00E3o de comprovante inexistente",
+      "key": "377ff911",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "nenhum comprovante existe com esse id"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/comprovantes/00000000-0000-0000-0000-000000000000"
+      },
+      "response": {
+        "status": 404
+      },
+      "transport": "http",
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "uma solicita\u00E7\u00E3o v\u00E1lida de comprovante PIX",
+      "key": "84f1ff17",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "o servi\u00E7o de Comprovantes est\u00E1 dispon\u00EDvel"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "chave_pix_destino": "11948755536",
+            "data_hora_transacao": "2026-07-08T20:03:57.123456789",
+            "digito_verificador_conta": "0",
+            "identificacao_pix": "Segue pagamento da minha cota no churrasco de domingo",
+            "nome": "Giovanni Vicente",
+            "nome_cliente_destino": "Fernando Augusto",
+            "numero_agencia": "2022",
+            "numero_conta": "00276",
+            "numero_documento": "50329291076",
+            "tipo_chave_pix_destino": "CELULAR",
+            "tipo_documento": "CPF",
+            "valor_transacao": 23.99
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "content-type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/comprovantes"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "data_hora_requisicao": "2026-07-08T20:03:57.116061100",
+            "identificador_comprovante": "b819cc65-f6f0-478c-8bb7-69ee1c4f6402"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "content-type": [
+            "application/json"
+          ]
+        },
+        "status": 202
+      },
+      "transport": "http",
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "uma consulta de confirma\u00E7\u00E3o de comprovante existente",
+      "key": "35027339",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "um comprovante com id b819cc65-f6f0-478c-8bb7-69ee1c4f6402 j\u00E1 foi persistido"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/comprovantes/b819cc65-f6f0-478c-8bb7-69ee1c4f6402"
+      },
+      "response": {
+        "status": 200
+      },
+      "transport": "http",
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": [
+
+    ]
+  },
+  "provider": {
+    "name": "comprovantes-service"
+  }
+}

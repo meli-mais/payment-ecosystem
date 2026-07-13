@@ -1,0 +1,7 @@
+[submodule "services/payment-core"]
+	path = services/payment-core
+	url = https://github.com/meli-mais/payment-core.git
+	branch = develop
+[submodule "services/comprovantes"]
+	path = services/comprovantes
+	url = https://github.com/meli-mais/vigilant-goggles.git

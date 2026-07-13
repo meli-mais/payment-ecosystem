@@ -1,0 +1,130 @@
+# Ecossistema completo de pagamentos PIX — sobe infraestrutura + os 2 serviços de uma vez.
+#
+#   docker compose up --build
+#
+# Serviços (portas no host):
+#   - payment-core (SAGA)        http://localhost:8080     (Swagger: /swagger-ui.html)
+#   - comprovantes + notificação http://localhost:8081     (H2: /h2-console)
+#   - RabbitMQ management         http://localhost:15672    (guest/guest)
+#   - Kafka UI                    http://localhost:8090
+#
+# O payment-core fala com o comprovantes REAL (não mais WireMock) via rede interna:
+# COMPROVANTES_BASE_URL=http://comprovantes:8080.
+
+services:
+  # ----------------------------------------------------------------- infraestrutura
+  redis:
+    image: redis:7-alpine
+    container_name: pix-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [pix-net]
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: pix-rabbitmq
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [pix-net]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: pix-kafka
+    ports:
+      - "9092:9092"     # listener externo (host)
+    environment:
+      # Modo KRaft (sem ZooKeeper)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_LISTENERS: "INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [pix-net]
+
+  kafka-ui:
+    image: kafbat/kafka-ui:latest
+    container_name: pix-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: pix
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    networks: [pix-net]
+
+  # ----------------------------------------------------------------- serviços
+  # Comprovantes (Membros 2/3) + Notificação (Membro 4) — submodule vigilant-goggles.
+  comprovantes:
+    build:
+      context: ./services/comprovantes/ms-comprovantes
+      dockerfile: Dockerfile
+    container_name: pix-comprovantes
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks: [pix-net]
+
+  # Core & SAGA (Membro 1) — submodule payment-core. Aponta para o comprovantes real.
+  payment-core:
+    build:
+      context: ./services/payment-core
+      dockerfile: Dockerfile
+    container_name: pix-payment-core
+    depends_on:
+      comprovantes:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: 8080
+      COMPROVANTES_BASE_URL: http://comprovantes:8080
+    networks: [pix-net]
+
+networks:
+  pix-net:
+    driver: bridge
