@@ -20,16 +20,23 @@ documentação de arquitetura e de replicação em Cloud.
                                 RabbitMQ  │ POST → fila →  │  persiste no Postgres
                                    Redis  │ GET (cache-aside, 3 tentativas → 404)
                                 Postgres  │                │
-                                          └───────────────┘
+                                          └───────┬───────┘
+                                                  │  Kafka: evento "Pagamento Realizado"
+                                                  ▼
+                                       notificacao (Java, @RetryableTopic)   :8082
+                                       consome o tópico e "notifica" o cliente
 ```
 
 - **payment-core** (Java/Spring) — Membro 1. Recebe o pagamento, orquestra a SAGA e só dá a
   fatura como paga se o comprovante for confirmado. Resiliência com Resilience4j.
 - **ms-comprovantes** (Python/FastAPI) — POST assíncrono via RabbitMQ (persiste no Postgres),
-  GET com cache-aside no Redis (3 tentativas antes do 404). Arquitetura hexagonal.
+  GET com cache-aside no Redis (3 tentativas antes do 404); publica o evento no Kafka.
+- **notificacao** (Java/Spring) — subscriber Kafka do evento "Pagamento Realizado", com retry
+  via `@RetryableTopic`. É o `vigilant-goggles` rodando no profile `integration` (só o papel
+  de Notificação); rodando sozinho, ele é o serviço completo de Comprovantes+Notificação.
 
-> O contrato HTTP (paths, payloads snake_case, enums incl. `CHAVE_ALEATORIA`) foi validado
-> campo a campo entre os dois serviços — ver [`docs/arquitetura.md`](docs/arquitetura.md).
+> O contrato HTTP (paths, payloads snake_case, enums incl. `CHAVE_ALEATORIA`) e o evento Kafka
+> (`NotificacaoEvent`) foram validados campo a campo — ver [`docs/arquitetura.md`](docs/arquitetura.md).
 
 Detalhes em [`docs/arquitetura.md`](docs/arquitetura.md).
 
@@ -38,7 +45,8 @@ Detalhes em [`docs/arquitetura.md`](docs/arquitetura.md).
 | Submodule (`services/`) | Repositório | Branch | Papel |
 |---|---|---|---|
 | `payment-core` | [meli-mais/payment-core](https://github.com/meli-mais/payment-core) | `develop` | Core & SAGA (Java) — Membro 1 |
-| `comprovantes` | [meli-mais/ms-comprovantes](https://github.com/meli-mais/ms-comprovantes) | `develop` | Comprovantes (Python/FastAPI) |
+| `comprovantes` | [meli-mais/ms-comprovantes](https://github.com/meli-mais/ms-comprovantes) | `feat/notificacao-kafka` | Comprovantes (Python/FastAPI) + producer Kafka |
+| `notificacao` | [meli-mais/vigilant-goggles](https://github.com/meli-mais/vigilant-goggles) | `feat/notificacao-integracao` | Notificação (Java, `@RetryableTopic`) |
 
 ## Como rodar tudo
 
@@ -62,9 +70,11 @@ docker compose up --build
 |---|---|
 | payment-core (SAGA) | http://localhost:8080 — Swagger em `/swagger-ui.html` |
 | ms-comprovantes | http://localhost:8081 — Docs em `/docs` |
+| notificacao (Java) | http://localhost:8082 |
 | RabbitMQ (management) | http://localhost:15672 — guest/guest |
 | PostgreSQL | localhost:5432 |
 | Redis | localhost:6379 |
+| Kafka | localhost:9092 |
 
 ### Teste de fumaça (happy path)
 
@@ -88,7 +98,21 @@ curl -i -X POST http://localhost:8080/api/v1/pagamentos \
   }'
 ```
 
-Acompanhe o comprovante sendo persistido (RabbitMQ) e a notificação publicada (Kafka UI).
+A resposta é `202` com a fatura `PAGA`; nos logs do serviço `notificacao` aparece a
+"Notificação recebida" (o evento que percorreu o Kafka).
+
+## Testes
+
+Teste **end-to-end** do ecossistema (os 3 serviços juntos, rodando):
+
+```bash
+docker compose up -d --build
+./tests/e2e.sh
+```
+
+Cobre: happy path (SAGA → fatura PAGA + evento Kafka na Notificação), `CHAVE_ALEATORIA`,
+idempotência e validação (`400`). Detalhes em [`tests/README.md`](tests/README.md). Os testes
+de unidade/arquitetura/contrato ficam **dentro de cada serviço**.
 
 ## Contratos compartilhados (PACT)
 
@@ -105,6 +129,10 @@ git add services/ && git commit -m "chore: atualiza submodules"
 
 ## Documentação
 
-- [`docs/arquitetura.md`](docs/arquitetura.md) — visão de arquitetura e fluxo SAGA.
+- [`docs/arquitetura.md`](docs/arquitetura.md) — visão de arquitetura, fluxo SAGA e contratos.
+- [`docs/requisitos-e-entrega.md`](docs/requisitos-e-entrega.md) — mapa requisitos × entrega
+  (checklist da rubrica com evidências).
 - [`docs/replicacao-cloud.md`](docs/replicacao-cloud.md) — estratégia de replicação em Cloud
   (item 5 da rubrica).
+- [`tests/README.md`](tests/README.md) — testes end-to-end do ecossistema.
+- [`contracts/README.md`](contracts/README.md) — contrato PACT compartilhado.
