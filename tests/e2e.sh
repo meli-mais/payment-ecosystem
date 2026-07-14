@@ -92,6 +92,27 @@ resp=$(pagar "$(uuid)" "$(payload TIPO_INVALIDO)"); code="${resp##*|}"
 [ "$code" = "400" ] && ok "payload inválido → 400 Bad Request" || ko "esperava 400, veio $code"
 
 # ----------------------------------------------------------------------------
+# T5 fica por ÚLTIMO: ele para o Comprovantes (indisponibilidade) e religa no fim.
+echo ""; echo "== T5: compensação da SAGA (Comprovantes indisponível → fatura FALHOU) =="
+COMPROVANTES_CONTAINER="${COMPROVANTES_CONTAINER:-pix-comprovantes}"
+docker stop "$COMPROVANTES_CONTAINER" >/dev/null 2>&1 && echo "  comprovantes parado (simulando indisponibilidade)"
+sleep 2
+resp=$(pagar "$(uuid)" "$(payload CELULAR)"); code="${resp##*|}"; body="${resp%|*}"
+if [ "$code" = "202" ] && echo "$body" | grep -q '"status":"FALHOU"'; then
+  ok "Comprovantes indisponível → fatura FALHOU (compensação da SAGA)"
+else
+  ko "esperava 202 + status FALHOU, veio: $code $body"
+fi
+# religa o Comprovantes e espera ficar pronto (deixa o stack saudável ao fim)
+docker start "$COMPROVANTES_CONTAINER" >/dev/null 2>&1
+echo "  religando comprovantes..."
+for i in $(seq 1 25); do
+  d=$(curl -s -o /dev/null -w "%{http_code}" "$COMPROVANTES_URL/docs" 2>/dev/null)
+  [ "$d" = "200" ] && { green "  comprovantes de volta (tentativa $i)"; break; }
+  sleep 3
+done
+
+# ----------------------------------------------------------------------------
 echo ""; echo "========================================"
 green "PASSOU: $PASS"; [ "$FAIL" -gt 0 ] && red "FALHOU: $FAIL" || echo "FALHOU: 0"
 echo "========================================"

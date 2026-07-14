@@ -110,7 +110,8 @@ docker compose up -d --build
 ./tests/e2e.sh
 ```
 
-Cobre: happy path (SAGA → fatura PAGA + evento Kafka na Notificação), `CHAVE_ALEATORIA`,
+Cobre a SAGA nos **dois sentidos** — sucesso (fatura PAGA + evento Kafka na Notificação) e
+**falha/compensação** (Comprovantes indisponível → fatura FALHOU) — além de `CHAVE_ALEATORIA`,
 idempotência e validação (`400`). Detalhes em [`tests/README.md`](tests/README.md). Os testes
 de unidade/arquitetura/contrato ficam **dentro de cada serviço**.
 

@@ -7,7 +7,7 @@ foi entregue no ecossistema. Serve como checklist de avaliação.
 
 | # | Requisito | Status | Onde / evidência |
 |---|---|---|---|
-| **1** | **MS Pagamento/Fatura (SAGA)** — recebe PIX; fatura paga só se o comprovante for gerado | ✅ | `payment-core` (Java). Orquestração SAGA; e2e T1 mostra fatura `PAGA` só após confirmar o comprovante |
+| **1** | **MS Pagamento/Fatura (SAGA)** — recebe PIX; fatura paga só se o comprovante for gerado | ✅ | `payment-core` (Java). SAGA provada nos dois sentidos: e2e **T1** → `PAGA` só após confirmar; e2e **T5** → `FALHOU` (compensação) quando o comprovante fica indisponível |
 | **2** | **MS Comprovantes** — POST → `202`+UUID v4 → **RabbitMQ** → consumer grava no banco; GET → **Redis** (cache-aside) → 3 tentativas → `404` | ✅ | `ms-comprovantes` (Python). Fila RabbitMQ + cache Redis + Postgres |
 | **3** | **MS Notificação** — evento "Pagamento Realizado" no **tópico Kafka**; subscriber; **`@RetryableTopic`** | ✅ | `notificacao` (Java, profile `integration`). e2e T1 confirma o evento recebido |
 | **4** | **Testes de Contrato (PACT)** entre Pagamento e Comprovantes | ✅ | `payment-core/ComprovanteContractTest` + `contracts/` (pact compartilhado) |

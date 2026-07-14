@@ -24,6 +24,10 @@ O script espera os serviços ficarem prontos, executa os casos e imprime um resu
 | **T2 — CHAVE_ALEATORIA** | o enum bate nos 3 serviços (poliglota) — sem 400 | Contrato / DDD |
 | **T3 — idempotência** | mesma `Idempotency-Key` devolve a **mesma** fatura | SAGA (consistência) |
 | **T4 — validação** | `tipo_chave_pix_destino` inválido → `400` | Contrato de entrada |
+| **T5 — compensação** | para o Comprovantes → `POST` → fatura **FALHOU** (a SAGA compensa); religa no fim | SAGA (caminho de falha) |
+
+Assim a SAGA é provada nos **dois sentidos**: **PAGA** (sucesso) e **FALHOU** (falha/compensação).
+O T5 roda por último porque para/religa o container do Comprovantes.
 
 O T1 prova a cadeia inteira: **payment-core → comprovantes (Python) → Kafka → notificacao
 (Java)** — contando as linhas "Notificação recebida" no log do container antes/depois do
