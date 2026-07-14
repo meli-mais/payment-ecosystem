@@ -20,16 +20,23 @@ documentação de arquitetura e de replicação em Cloud.
                                 RabbitMQ  │ POST → fila →  │  persiste no Postgres
                                    Redis  │ GET (cache-aside, 3 tentativas → 404)
                                 Postgres  │                │
-                                          └───────────────┘
+                                          └───────┬───────┘
+                                                  │  Kafka: evento "Pagamento Realizado"
+                                                  ▼
+                                       notificacao (Java, @RetryableTopic)   :8082
+                                       consome o tópico e "notifica" o cliente
 ```
 
 - **payment-core** (Java/Spring) — Membro 1. Recebe o pagamento, orquestra a SAGA e só dá a
   fatura como paga se o comprovante for confirmado. Resiliência com Resilience4j.
 - **ms-comprovantes** (Python/FastAPI) — POST assíncrono via RabbitMQ (persiste no Postgres),
-  GET com cache-aside no Redis (3 tentativas antes do 404). Arquitetura hexagonal.
+  GET com cache-aside no Redis (3 tentativas antes do 404); publica o evento no Kafka.
+- **notificacao** (Java/Spring) — subscriber Kafka do evento "Pagamento Realizado", com retry
+  via `@RetryableTopic`. É o `vigilant-goggles` rodando no profile `integration` (só o papel
+  de Notificação); rodando sozinho, ele é o serviço completo de Comprovantes+Notificação.
 
-> O contrato HTTP (paths, payloads snake_case, enums incl. `CHAVE_ALEATORIA`) foi validado
-> campo a campo entre os dois serviços — ver [`docs/arquitetura.md`](docs/arquitetura.md).
+> O contrato HTTP (paths, payloads snake_case, enums incl. `CHAVE_ALEATORIA`) e o evento Kafka
+> (`NotificacaoEvent`) foram validados campo a campo — ver [`docs/arquitetura.md`](docs/arquitetura.md).
 
 Detalhes em [`docs/arquitetura.md`](docs/arquitetura.md).
 
@@ -38,7 +45,8 @@ Detalhes em [`docs/arquitetura.md`](docs/arquitetura.md).
 | Submodule (`services/`) | Repositório | Branch | Papel |
 |---|---|---|---|
 | `payment-core` | [meli-mais/payment-core](https://github.com/meli-mais/payment-core) | `develop` | Core & SAGA (Java) — Membro 1 |
-| `comprovantes` | [meli-mais/ms-comprovantes](https://github.com/meli-mais/ms-comprovantes) | `develop` | Comprovantes (Python/FastAPI) |
+| `comprovantes` | [meli-mais/ms-comprovantes](https://github.com/meli-mais/ms-comprovantes) | `feat/notificacao-kafka` | Comprovantes (Python/FastAPI) + producer Kafka |
+| `notificacao` | [meli-mais/vigilant-goggles](https://github.com/meli-mais/vigilant-goggles) | `feat/notificacao-integracao` | Notificação (Java, `@RetryableTopic`) |
 
 ## Como rodar tudo
 
@@ -62,9 +70,11 @@ docker compose up --build
 |---|---|
 | payment-core (SAGA) | http://localhost:8080 — Swagger em `/swagger-ui.html` |
 | ms-comprovantes | http://localhost:8081 — Docs em `/docs` |
+| notificacao (Java) | http://localhost:8082 |
 | RabbitMQ (management) | http://localhost:15672 — guest/guest |
 | PostgreSQL | localhost:5432 |
 | Redis | localhost:6379 |
+| Kafka | localhost:9092 |
 
 ### Teste de fumaça (happy path)
 

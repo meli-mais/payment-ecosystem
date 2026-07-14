@@ -5,4 +5,8 @@
 [submodule "services/comprovantes"]
 	path = services/comprovantes
 	url = https://github.com/meli-mais/ms-comprovantes.git
-	branch = develop
+	branch = feat/notificacao-kafka
+[submodule "services/notificacao"]
+	path = services/notificacao
+	url = https://github.com/meli-mais/vigilant-goggles.git
+	branch = feat/notificacao-integracao

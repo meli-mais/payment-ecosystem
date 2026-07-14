@@ -2,10 +2,10 @@
 
 ## Visão geral
 
-Sistema distribuído que processa pagamentos de faturas via PIX e emite comprovantes. Aplica
-DDD/arquitetura hexagonal nos dois serviços, comunicação assíncrona, cache e resiliência.
-Bancos de dados segregados por serviço. Os dois serviços são de **linguagens diferentes** e
-conversam por um **contrato HTTP** (REST/JSON) — poliglota, integração por contrato.
+Sistema distribuído que processa pagamentos de faturas via PIX, emite comprovantes e notifica
+o cliente. Aplica DDD/arquitetura hexagonal, comunicação assíncrona (fila **e** tópico), cache
+e resiliência. Bancos segregados por serviço. É **poliglota**: os serviços são de linguagens
+diferentes e conversam por contratos (HTTP + evento Kafka).
 
 ```
                  POST /api/v1/pagamentos
@@ -22,7 +22,13 @@ conversam por um **contrato HTTP** (REST/JSON) — poliglota, integração por c
                                           │       consumer grava no banco  │  PostgreSQL
                                Redis ────►│ GET: cache-aside, 3 tentativas │
                                           │      antes de 404              │
-                                          └──────────────────────────────┘
+                                          └──────────────┬───────────────┘
+                                                         │  Kafka: evento "Pagamento Realizado"
+                                                         │  (tópico notificacoes.topic)
+                                                         ▼
+                                     notificacao (Java/Spring)                   :8082
+                                          subscriber com @RetryableTopic
+                                          (4 tentativas + DLT) → "notifica" o cliente
 ```
 
 ## Serviços
@@ -43,7 +49,27 @@ conversam por um **contrato HTTP** (REST/JSON) — poliglota, integração por c
   RabbitMQ e retorna 202; um consumer grava no PostgreSQL de forma assíncrona.
 - **GET /comprovantes/{id}:** cache-aside no Redis; em cache miss busca no banco com até 3
   tentativas antes de 404.
-- **Repo:** `meli-mais/ms-comprovantes` (submodule `services/comprovantes`, branch `develop`).
+- **Publica** o evento "Pagamento Realizado" no Kafka após persistir (producer aiokafka).
+- **Repo:** `meli-mais/ms-comprovantes` (submodule `services/comprovantes`, branch
+  `feat/notificacao-kafka`).
+
+### notificacao — Notificação (Java)
+- **Stack:** Java 17, Spring Boot, Spring Kafka. É o `vigilant-goggles` rodando no profile
+  `integration` (atua só como Notificação; sem o profile, é Comprovantes+Notificação completo).
+- **Consome** `notificacoes.topic` e "notifica" o cliente. Retry com **`@RetryableTopic`**
+  (4 tentativas, backoff exponencial) + **DLT** ao esgotar.
+- **Repo:** `meli-mais/vigilant-goggles` (submodule `services/notificacao`, branch
+  `feat/notificacao-integracao`).
+
+## Contrato do evento Kafka Comprovantes → Notificação
+
+Tópico `notificacoes.topic`. O producer Python publica JSON sem type headers do Spring; o
+consumer Java desserializa em `NotificacaoEvent` (profile `integration` fixa o tipo alvo):
+
+```json
+{ "comprovante_id": "<uuid>", "status": "PROCESSADO",
+  "mensagem": "Comprovante processado com sucesso", "data_hora": "2026-07-14T00:00:00" }
+```
 
 ## Contrato de integração Core ↔ Comprovantes
 
@@ -72,11 +98,16 @@ Validado campo a campo entre o Java (consumer) e o Python (provider):
 
 ## Decisões que valem registrar
 
-- **Integração poliglota por contrato:** Core em Java, Comprovantes em Python; o acoplamento é
-  só o contrato HTTP. Cada serviço evolui na sua linguagem/stack.
-- **Bancos segregados:** Core usa H2; Comprovantes usa PostgreSQL. Independentes.
-- **Notificação (Kafka):** não faz parte deste serviço Python nem do Core. Se o grupo entregar
-  o serviço de Notificação, ele é um subscriber à parte e não altera a integração Core↔Comprovantes.
+- **Integração poliglota por contrato:** Core e Notificação em Java, Comprovantes em Python; o
+  acoplamento é só o contrato (HTTP entre Core↔Comprovantes; evento Kafka entre
+  Comprovantes↔Notificação). Cada serviço evolui na sua linguagem/stack.
+- **Bancos segregados:** Core e Notificação usam H2; Comprovantes usa PostgreSQL. Independentes.
+- **Notificação = mesmo repo, papel por profile:** o serviço Java (`vigilant-goggles`) roda no
+  profile `integration`, que desliga seu lado de Comprovantes (não compete com o Python pela
+  fila) e o deixa só como subscriber Kafka. Rodando sem o profile, continua completo e testável
+  isolado — por isso mantivemos os dois repos em vez de fundir.
+- **`@RetryableTopic` é Java-only:** o requisito da anotação (item 3 do desafio) exige Spring,
+  por isso o consumer de Notificação é Java, enquanto o Comprovantes (que só publica) é Python.
 - **Contrato de risco — formato de data:** o Java serializa `LocalDateTime` com até
   nanossegundos; o `datetime` do Python (Pydantic) trunca a microssegundos. Não quebra o
   parsing, mas vale conferir no teste de fumaça se a precisão importar.
