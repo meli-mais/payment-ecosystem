@@ -41,7 +41,9 @@ services:
       - "5672:5672"     # AMQP
       - "15672:15672"   # UI
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # check_port_connectivity garante que o listener AMQP (5672) aceita conexões — o
+      # 'ping' fica healthy antes disso e causava corrida no startup do comprovantes.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -67,6 +69,7 @@ services:
       context: ./services/comprovantes
       dockerfile: Dockerfile
     container_name: pix-comprovantes
+    restart: on-failure     # rede de segurança contra corrida de infra no boot
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,6 +93,7 @@ services:
       context: ./services/payment-core
       dockerfile: Dockerfile
     container_name: pix-payment-core
+    restart: on-failure     # rede de segurança contra corrida de infra no boot
     depends_on:
       comprovantes:
         condition: service_started
