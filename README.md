@@ -98,7 +98,21 @@ curl -i -X POST http://localhost:8080/api/v1/pagamentos \
   }'
 ```
 
-Acompanhe o comprovante sendo persistido (RabbitMQ) e a notificação publicada (Kafka UI).
+A resposta é `202` com a fatura `PAGA`; nos logs do serviço `notificacao` aparece a
+"Notificação recebida" (o evento que percorreu o Kafka).
+
+## Testes
+
+Teste **end-to-end** do ecossistema (os 3 serviços juntos, rodando):
+
+```bash
+docker compose up -d --build
+./tests/e2e.sh
+```
+
+Cobre: happy path (SAGA → fatura PAGA + evento Kafka na Notificação), `CHAVE_ALEATORIA`,
+idempotência e validação (`400`). Detalhes em [`tests/README.md`](tests/README.md). Os testes
+de unidade/arquitetura/contrato ficam **dentro de cada serviço**.
 
 ## Contratos compartilhados (PACT)
 
@@ -115,6 +129,10 @@ git add services/ && git commit -m "chore: atualiza submodules"
 
 ## Documentação
 
-- [`docs/arquitetura.md`](docs/arquitetura.md) — visão de arquitetura e fluxo SAGA.
+- [`docs/arquitetura.md`](docs/arquitetura.md) — visão de arquitetura, fluxo SAGA e contratos.
+- [`docs/requisitos-e-entrega.md`](docs/requisitos-e-entrega.md) — mapa requisitos × entrega
+  (checklist da rubrica com evidências).
 - [`docs/replicacao-cloud.md`](docs/replicacao-cloud.md) — estratégia de replicação em Cloud
   (item 5 da rubrica).
+- [`tests/README.md`](tests/README.md) — testes end-to-end do ecossistema.
+- [`contracts/README.md`](contracts/README.md) — contrato PACT compartilhado.
