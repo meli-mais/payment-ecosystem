@@ -1,0 +1,241 @@
+{
+  "info": {
+    "name": "PIX Ecosystem (payment-core + comprovantes)",
+    "description": "Requisicoes para testar o ecossistema PIX rodando via `docker compose up -d` no payment-ecosystem. Importavel no Postman e no Insomnia. Base URLs em variaveis da collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrlCore",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "baseUrlComprovantes",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "faturaId",
+      "value": ""
+    },
+    {
+      "key": "comprovanteId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "payment-core (SAGA)",
+      "item": [
+        {
+          "name": "POST pagamento - sucesso (CELULAR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{baseUrlCore}}/api/v1/pagamentos",
+            "description": "Fluxo feliz: 202 + fatura PAGA. Salva o faturaId para o GET.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Giovanni Vicente\",\n  \"tipo_documento\": \"CPF\",\n  \"numero_documento\": \"50329291076\",\n  \"numero_agencia\": \"2022\",\n  \"numero_conta\": \"00276\",\n  \"digito_verificador_conta\": \"0\",\n  \"valor_transacao\": 23.99,\n  \"tipo_chave_pix_destino\": \"CELULAR\",\n  \"chave_pix_destino\": \"11948755536\",\n  \"nome_cliente_destino\": \"Fernando Augusto\",\n  \"identificacao_pix\": \"Churrasco de domingo\",\n  \"data_hora_transacao\": \"2026-07-10T20:03:57.116061100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.code === 202);",
+                  "const j = pm.response.json();",
+                  "pm.test('fatura PAGA', () => pm.expect(j.status).to.eql('PAGA'));",
+                  "pm.collectionVariables.set('faturaId', j.faturaId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST pagamento - chave aleatoria",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{baseUrlCore}}/api/v1/pagamentos",
+            "description": "PIX com CHAVE_ALEATORIA: 202 + PAGA (valida o enum entre os servicos).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Giovanni Vicente\",\n  \"tipo_documento\": \"CPF\",\n  \"numero_documento\": \"50329291076\",\n  \"numero_agencia\": \"2022\",\n  \"numero_conta\": \"00276\",\n  \"digito_verificador_conta\": \"0\",\n  \"valor_transacao\": 100.5,\n  \"tipo_chave_pix_destino\": \"CHAVE_ALEATORIA\",\n  \"chave_pix_destino\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n  \"nome_cliente_destino\": \"Fernando Augusto\",\n  \"identificacao_pix\": \"Churrasco de domingo\",\n  \"data_hora_transacao\": \"2026-07-10T20:03:57.116061100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.code === 202);",
+                  "pm.test('PAGA', () => pm.expect(pm.response.json().status).to.eql('PAGA'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST pagamento - validacao (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{baseUrlCore}}/api/v1/pagamentos",
+            "description": "tipo_chave_pix_destino invalido -> 400 Bad Request.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Giovanni Vicente\",\n  \"tipo_documento\": \"CPF\",\n  \"numero_documento\": \"50329291076\",\n  \"numero_agencia\": \"2022\",\n  \"numero_conta\": \"00276\",\n  \"digito_verificador_conta\": \"0\",\n  \"valor_transacao\": 23.99,\n  \"tipo_chave_pix_destino\": \"TIPO_INVALIDO\",\n  \"chave_pix_destino\": \"11948755536\",\n  \"nome_cliente_destino\": \"Fernando Augusto\",\n  \"identificacao_pix\": \"Churrasco de domingo\",\n  \"data_hora_transacao\": \"2026-07-10T20:03:57.116061100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.code === 400);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET fatura por id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrlCore}}/api/v1/pagamentos/{{faturaId}}",
+            "description": "Consulta a fatura criada no primeiro POST (usa o faturaId salvo)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.code === 200);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "comprovantes (direto)",
+      "item": [
+        {
+          "name": "POST /comprovantes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrlComprovantes}}/comprovantes",
+            "description": "Chama o Comprovantes direto: 202 + identificador_comprovante. Salva o comprovanteId para o GET.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Giovanni Vicente\",\n  \"tipo_documento\": \"CPF\",\n  \"numero_documento\": \"50329291076\",\n  \"numero_agencia\": \"2022\",\n  \"numero_conta\": \"00276\",\n  \"digito_verificador_conta\": \"0\",\n  \"valor_transacao\": 23.99,\n  \"tipo_chave_pix_destino\": \"CELULAR\",\n  \"chave_pix_destino\": \"11948755536\",\n  \"nome_cliente_destino\": \"Fernando Augusto\",\n  \"identificacao_pix\": \"Churrasco de domingo\",\n  \"data_hora_transacao\": \"2026-07-10T20:03:57.116061100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.code === 202);",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('comprovanteId', j.identificador_comprovante);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /comprovantes/{id}",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrlComprovantes}}/comprovantes/{{comprovanteId}}",
+            "description": "Busca o comprovante (cache-aside; pode levar ~1s ate persistir). 200 quando pronto."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.code === 200);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

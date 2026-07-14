@@ -115,6 +115,15 @@ Cobre a SAGA nos **dois sentidos** — sucesso (fatura PAGA + evento Kafka na No
 idempotência e validação (`400`). Detalhes em [`tests/README.md`](tests/README.md). Os testes
 de unidade/arquitetura/contrato ficam **dentro de cada serviço**.
 
+### Coleção Postman / Insomnia (testes manuais)
+
+Para testar/demonstrar na mão, importe
+[`postman/PIX-Ecosystem.postman_collection.json`](postman/PIX-Ecosystem.postman_collection.json)
+— funciona no **Postman** e no **Insomnia** (ambos importam o formato Postman v2.1). Traz os
+fluxos do `payment-core` (pagamento sucesso, chave aleatória, validação 400, consulta da
+fatura) e do `comprovantes` (POST/GET direto), com as base URLs em variáveis e o `faturaId`
+encadeado automaticamente. Suba o stack antes (`docker compose up -d`).
+
 ## Contratos compartilhados (PACT)
 
 O contrato consumidor→provedor entre `payment-core` e `comprovantes` fica em
@@ -136,4 +145,5 @@ git add services/ && git commit -m "chore: atualiza submodules"
 - [`docs/replicacao-cloud.md`](docs/replicacao-cloud.md) — estratégia de replicação em Cloud
   (item 5 da rubrica).
 - [`tests/README.md`](tests/README.md) — testes end-to-end do ecossistema.
+- [`postman/`](postman/) — coleção Postman/Insomnia para testes manuais.
 - [`contracts/README.md`](contracts/README.md) — contrato PACT compartilhado.
